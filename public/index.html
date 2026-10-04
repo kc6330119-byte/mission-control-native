@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mission Control</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">Mission Control</span>
+    </div>
+    <nav class="site-nav" aria-label="Pages">
+      <a href="#/meetings" data-page="meetings">Meetings</a>
+      <a href="#/board" data-page="board">Board</a>
+      <a href="#/library" data-page="library">Library</a>
+      <a href="#/agents" data-page="agents">Agents</a>
+      <a href="#/corrections" data-page="corrections">Corrections</a>
+    </nav>
+    <div class="chips">
+      <span class="chip chip-demo" id="demo-badge" hidden>Recreated demo data</span>
+      <span class="chip chip-local" title="Runs on this Mac. No server, no network calls.">Local only</span>
+    </div>
+  </header>
+  <main id="app" tabindex="-1"></main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
