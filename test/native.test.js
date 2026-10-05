@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { after, before, test } from 'node:test';
+import { after, before, describe, test } from 'node:test';
 import { startSite } from './helpers/site.js';
 
 const meeting = (title, date, sections) => `# ${title} | ${date}
@@ -143,4 +143,130 @@ test('the page title and brand are the app name, written once in app/tauri.conf.
   assert.ok(page.text.includes(`<title>${name}</title>`), 'title');
   assert.ok(page.text.includes(`<span class="brand-name">${name}</span>`), 'brand');
   assert.ok(!page.text.includes('__'), 'no placeholder left');
+});
+
+// Decision 76: a meeting opens when its file is one of the summaries listed from meeting-notes/, whatever
+// characters its name has. Before 0.1.1 the name had to match ^[\w.-]+\.md$, so a summary saved under a
+// transcript's name with spaces was listed but could not be opened.
+describe('a summary whose file name has spaces, an apostrophe, an ampersand and an accented letter', () => {
+  const NAME = "2026-10-05_kevin & sam's café 1on1.md";
+  const NOTE = 'Sam asked to keep the café plan quiet until Friday.';
+  const NOT_MD = 'agenda for café.txt';
+  let odd;
+  before(async () => {
+    odd = await startSite({
+      prepare(root) {
+        const notes = path.join(root, 'meeting-notes');
+        fs.writeFileSync(path.join(notes, NAME), meeting('Kevin & Sam: Café 1:1', 'October 5, 2026', `## Action Items
+
+| # | Action Item | Owner | Status |
+|---|---|---|---|
+| 1 | Book the café for the team lunch | Sam Ortiz | Agreed |
+| 2 | Send Sam's notes to the team | Kevin Collins | Agreed |
+
+## Notes
+
+- **Manager-only note:** ${NOTE}
+`));
+        fs.writeFileSync(path.join(notes, NOT_MD), 'Agenda text that must never be returned.\n');
+      },
+    });
+  });
+  after(async () => { await odd?.stop(); });
+
+  test('is listed, opens, shows its header fields and hides its Manager-only note with the switch off', async () => {
+    const listed = (await odd.api.meetings()).find((m) => m.file === NAME);
+    assert.ok(listed, 'listed on the Meetings page');
+    assert.equal(listed.date, '2026-10-05');
+
+    const res = await odd.api.meetingRaw(NAME);
+    assert.equal(res.status, 200, res.text.slice(0, 200));
+    const m = res.json;
+    assert.equal(m.file, NAME);
+    assert.equal(m.date, '2026-10-05');
+    assert.equal(m.title, 'Kevin & Sam: Café 1:1 | October 5, 2026');
+    assert.deepEqual(m.people, ['Kevin Collins', 'Sam Ortiz']);
+    assert.equal(m.type, '1:1');
+    const html = decode(m.html);
+    for (const field of ['Date', 'Duration', 'Attendees', 'Company', 'Type']) assert.ok(html.includes(`<dt>${field}</dt>`), field);
+    assert.ok(html.includes('Sam Ortiz (SRE)</dd>'), 'attendees shown');
+    assert.equal(m.privateNotes, 1);
+    assert.ok(!html.includes(NOTE), 'the Manager-only note is hidden');
+
+    const shown = await odd.api.meetingRaw(NAME, { showPrivate: true });
+    assert.equal(shown.status, 200);
+    assert.ok(decode(shown.json.html).includes(NOTE), 'and shown with the switch on');
+  });
+
+  test('its action items import to the Board, and the card links back to it', async () => {
+    const result = await odd.api.importItems(false);
+    assert.ok(result.counts.added >= 2);
+    const cards = (await odd.api.board()).cards.filter((c) => c.meeting === NAME);
+    assert.deepEqual(cards.map((c) => c.key), [`${NAME}#1`, `${NAME}#2`]);
+    assert.deepEqual(cards.map((c) => c.title), ['Book the café for the team lunch', "Send Sam's notes to the team"]);
+    for (const c of cards) {
+      assert.equal(c.meetingDate, '2026-10-05');
+      // The card's link is #/meetings/<encodeURIComponent(card.meeting)>, which asks for exactly this name.
+      const back = await odd.api.meetingRaw(c.meeting);
+      assert.equal(back.status, 200);
+      assert.equal(back.json.file, NAME);
+    }
+    // A card added by hand can name it too.
+    const added = await odd.api.addCard({ title: 'Own card', meeting: NAME });
+    assert.equal(added.status, 200, added.text.slice(0, 200));
+    assert.equal(added.json.card.meeting, NAME);
+    // And its items are tracked, with the summary as their source.
+    const tracked = await odd.api.tracked();
+    assert.deepEqual(tracked.find((r) => r.key === `${NAME}#1`).sources.map((s) => s.file), [NAME]);
+  });
+
+  test('names that are not a summary in meeting-notes/ are refused with 4xx and no file content', async () => {
+    const claude = fs.readFileSync(path.join(odd.root, 'CLAUDE.md'), 'utf8').split('\n').find((l) => l.trim().length > 20);
+    for (const [file, mustNotShow] of [
+      ['../CLAUDE.md', claude],
+      [path.join(odd.root, 'meeting-notes', NAME), NOTE],
+      [path.join(odd.root, 'CLAUDE.md'), claude],
+      [`../meeting-notes/${NAME}`, NOTE],
+      [`./${NAME}`, NOTE],
+      ['2026-10-06_nobody_1on1.md', null],
+      [NOT_MD, 'Agenda text'],
+      ['', null],
+    ]) {
+      const res = await odd.api.meetingRaw(file, { showPrivate: true });
+      assert.ok(res.status >= 400 && res.status < 500, `${file} -> ${res.status}`);
+      assert.equal(res.json?.noSummary, file, `${file}: says which name is not a summary`);
+      assert.equal(res.json.error, `There is no summary named "${file}" in meeting-notes/.`);
+      if (mustNotShow) assert.ok(!res.text.includes(mustNotShow), `${file}: no file content`);
+      assert.ok(!/Kevin & Sam: Café|"html"/.test(res.text), `${file}: no meeting returned`);
+    }
+  });
+});
+
+// Decision 77: a folder inside meeting-notes/ whose name ends in .md is not a summary. Before, it was listed,
+// and reading it as a file made the Meetings page answer 500.
+describe('a folder in meeting-notes/ whose name ends in .md', () => {
+  const FOLDER = 'old summaries.md';
+  let withFolder;
+  before(async () => {
+    withFolder = await startSite({
+      prepare(root) {
+        fs.mkdirSync(path.join(root, 'meeting-notes', FOLDER));
+        fs.writeFileSync(path.join(root, 'meeting-notes', FOLDER, '2026-01-05_inside_1on1.md'), meeting('Inside', 'January 5, 2026', '## Action Items\n'));
+      },
+    });
+  });
+  after(async () => { await withFolder?.stop(); });
+
+  test('is not listed, is not opened, and the Meetings page and the Board load', async () => {
+    const res = await withFolder.api.meetingsRaw();
+    assert.equal(res.status, 200, res.text.slice(0, 200));
+    assert.ok(!res.json.meetings.some((m) => m.file === FOLDER), 'not listed');
+    assert.equal(res.json.meetings.length, (await withFolder.api.meetings()).length);
+    const open = await withFolder.api.meetingRaw(FOLDER);
+    assert.equal(open.status, 404);
+    assert.equal(open.json.noSummary, FOLDER);
+    assert.equal((await withFolder.api.boardRaw()).status, 200);
+    assert.ok((await withFolder.api.importItems(false)).counts.added > 0);
+    assert.equal((await withFolder.api.addCard({ title: 'x', meeting: FOLDER })).status, 400);
+  });
 });

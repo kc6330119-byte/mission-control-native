@@ -45,6 +45,42 @@ Workspace…. The window title shows which folder is open.
 When a table, field or date can't be read reliably, the app shows "could not read" and lists the problem.
 It never guesses.
 
+## Using it with Claude Code
+
+The app shows the workspace and changes only three of its files. The summaries and the coaching come from
+Claude Code, run in the same folder. You need Claude Code installed and signed in.
+
+1. In Terminal, go to your workspace folder and start `claude`. The app's window title shows which folder
+   that is.
+2. `CLAUDE.md` is the coach. It is active as soon as the session opens. `/agents` lists the other two,
+   `negotiation-prep` and `blind-spot-check`, along with any built-in agents and any of your own.
+
+### Prompts to try
+
+| To do this | Type this |
+|---|---|
+| Turn a transcript into a meeting summary | `Review the transcript transcripts/2026-10-05_kevin-sam_1on1.txt` |
+| Prepare before you ask someone for something | `Use the negotiation-prep agent. I want to ask Praveen to run pairing sessions with Riley.` |
+| Check a plan against your own coaching points | `Use the blind-spot-check agent on this plan: <your plan or draft message>` |
+
+After a review, click Meetings in the app to see the new summary. If the Meetings page is already showing,
+reload it with View ▸ Reload (⌘R). On the Board, "Import action items" adds its action items as cards. Items
+marked "(suggested)" are added only when "Include suggested items" is ticked.
+
+### Before you start
+
+- Create a `transcripts/` folder in the workspace and put your transcript in it. The sample has none.
+- Start the transcript's file name with the meeting date, for example
+  `2026-10-05_kevin-sam_1on1.txt`. The coach saves the summary under the same name, ending in .md, and the
+  app reads the meeting's date from the start of that name.
+- Version 0.1.0 could open a summary only if its file name used letters, digits, dots, hyphens and
+  underscores. A space, an apostrophe, an ampersand or an accented letter stopped it. 0.1.1 has no such limit.
+- The sample's book notes are placeholders. In one test the coach said so and coached from the meeting
+  alone. Expect that until you write your own notes in `library/`.
+- The sample is written for a fictional team. To make it yours, edit `CLAUDE.md`, the summary template and
+  the two agent files, put your own goals in `goals/`, and remove the sample's summaries from
+  `meeting-notes/`. The coach and both agents read the summaries there.
+
 ## What it reads and writes
 
 It reads `meeting-notes/*.md`, `CLAUDE.md`, `.claude/agents/*.md`, `library/books.json` and the notes files
@@ -99,9 +135,15 @@ your Mac. `SPEC.md` records every decision made while building it.
 
 ## Known limits
 
-In a folder with no `library/books.json` or `corrections/corrections.json`, the app shows an empty Library or
-Corrections page and does not create those files. An assistant that keeps the workspace, or a copy of the
-sample, provides them.
+- In a folder with no `library/books.json` or `corrections/corrections.json`, the Library or Corrections page
+  shows a notice naming the missing file. Adding a book or a correction there is refused, and the app does
+  not create those files. An assistant that keeps the workspace, or a copy of the sample, provides them.
+- A page does not update by itself when a file changes on disk. Click another page and back, or use View ▸
+  Reload (⌘R).
+- The Meetings page lists only files in `meeting-notes/` whose names end in `.md`.
+- A notes file in `library/` is listed only if its name uses letters, digits, `.`, `-` and `_`. A notes file
+  whose name has a space or an accented letter is not shown. (Meeting summaries have no such limit since
+  0.1.1.)
 
 ## As is
 

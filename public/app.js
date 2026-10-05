@@ -28,7 +28,7 @@ async function api(path, { method = 'GET', body } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!res.ok) throw Object.assign(new Error(data.error || `Request failed (${res.status})`), { data });
   return data;
 }
 
@@ -49,6 +49,17 @@ function warningsPanel(warnings) {
 // does for a missing agents folder. A file that is there but can't be read is still an error.
 function missingFile(file, what) {
   return `<div class="notice">There is no <code>${esc(file)}</code> in this workspace, so there are ${what} to show.</div>`;
+}
+
+// A meeting name that is not one of the summaries in meeting-notes/ (the core says so with noSummary) shows this
+// plain notice instead of an error, as missingFile does for a missing file. The Node version never sends noSummary,
+// so it shows its error as before.
+function noSummary(err) {
+  if (typeof err.data?.noSummary !== 'string') return false;
+  app.innerHTML = `
+    <p><a class="back" href="#/meetings">← All meetings</a></p>
+    <div class="notice" id="no-summary">There is no summary named "<code>${esc(err.data.noSummary)}</code>" in <code>meeting-notes/</code>.</div>`;
+  return true;
 }
 
 function privateSwitch() {
@@ -167,7 +178,8 @@ async function renderMeetings() {
 
 async function renderMeeting(file) {
   const load = () => api(`/api/meeting?file=${encodeURIComponent(file)}${state.showPrivate ? '&private=1' : ''}`);
-  let m = await load();
+  let m;
+  try { m = await load(); } catch (err) { if (noSummary(err)) return; throw err; }
 
   const draw = () => {
     const privateLine = m.privateNotes
@@ -183,7 +195,7 @@ async function renderMeeting(file) {
       <article class="prose">${m.html}</article>`;
     document.getElementById('private-switch').addEventListener('change', async (e) => {
       state.showPrivate = e.target.checked;
-      try { m = await load(); draw(); } catch (err) { showError(err); }
+      try { m = await load(); draw(); } catch (err) { if (!noSummary(err)) showError(err); }
     });
   };
   draw();

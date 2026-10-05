@@ -5,6 +5,8 @@
 //   - no listening port or socket for the app's process, every page loads, moves and saves land in the
 //     files, the private-notes switch is off after a reload and a restart, web links leave the window, the
 //     content security policy blocks anything from elsewhere, and no page shows "Invalid Date"
+//   - a summary named with spaces, an apostrophe, an ampersand and an accented letter opens from the Meetings
+//     page and from its Board card, and a name that is not a summary shows a plain notice
 //
 //   node tools/check-app.mjs            build both, then check
 //   node tools/check-app.mjs --no-build check the bundles already built
@@ -65,6 +67,13 @@ const header = (title, date) => `# ${title} | ${date}\n\n**Date:** ${date} | **D
 fs.writeFileSync(path.join(WS, 'meeting-notes', '2026-10-12_check_1on1.md'), header('Check', 'October 12, 2026')
   + '## Action Items\n\n| # | Action Item | Owner | Status |\n|---|---|---|---|\n\n## Open Items from Earlier Meetings\n\n| From | Item | Owner | Status now |\n|---|---|---|---|\n| Feb 30 | First seen on a date that does not exist | Sam Ortiz | Open |\n');
 fs.writeFileSync(path.join(WS, 'meeting-notes', '2026-02-30_check_1on1.md'), header('Check C', 'February 30, 2026') + '## Action Items\n');
+// A summary whose file name has spaces, an apostrophe, an ampersand and an accented letter (decision 76). It is the
+// newest meeting with a private note, so the private-notes switch checks below run on it too.
+const ODD_NAME = "2026-10-13_kevin & sam's café check.md";
+const ODD_NOTE = 'Sam asked to keep the café plan quiet until Friday.';
+fs.writeFileSync(path.join(WS, 'meeting-notes', ODD_NAME), header('Kevin & Sam: Café check', 'October 13, 2026')
+  + '## Action Items\n\n| # | Action Item | Owner | Status |\n|---|---|---|---|\n| 1 | Book the café for the team lunch | Sam Ortiz | Agreed |\n\n'
+  + `## Notes\n\n- **Manager-only note:** ${ODD_NOTE}\n`);
 const claude = path.join(WS, 'CLAUDE.md');
 fs.writeFileSync(claude, fs.readFileSync(claude, 'utf8').replace(/^Last reviewed:.*$/m, 'Last reviewed: 2026-02-30'));
 
@@ -106,6 +115,7 @@ fs.rmSync(SETTINGS_DIR, { recursive: true, force: true });
 // ---------- run the app ----------
 const events = [];
 const lsofs = {};
+const meetingRequests = [];
 async function run(profile, label, env, { timeout = 180000, untilWindow = false } = {}) {
   const child = spawn(exePath(profile), [], { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = '';
@@ -119,6 +129,9 @@ async function run(profile, label, env, { timeout = 180000, untilWindow = false 
     if (id) sh('screencapture', ['-x', '-o', '-l', id, path.join(SHOTS, `${label}-${name}.png`)]);
   };
   const onLine = (line) => {
+    // What the core received for each meeting, exactly as the window sent it.
+    const asked = line.match(/^\[probe\] GET (\/api\/meeting\?\S*) -> (\d+)/);
+    if (asked) meetingRequests.push({ run: label, target: asked[1], status: Number(asked[2]) });
     const m = line.match(/^\[probe\] GET \/__probe\/([\w-]+)\?(\S*) -> /);
     if (!m) return;
     const data = JSON.parse(decodeURIComponent(m[2]) || 'null');
@@ -147,7 +160,8 @@ async function run(profile, label, env, { timeout = 180000, untilWindow = false 
 
 const probeScript = (mode) => {
   const p = path.join(OUT, `probe-${mode}.js`);
-  fs.writeFileSync(p, fs.readFileSync(path.join(REPO, 'tools', 'check-app-probe.js'), 'utf8').replace('__MODE__', mode));
+  fs.writeFileSync(p, fs.readFileSync(path.join(REPO, 'tools', 'check-app-probe.js'), 'utf8').replace('__MODE__', mode)
+    .replace("'__ODD_NAME__'", JSON.stringify(ODD_NAME)));
   return p;
 };
 
@@ -214,6 +228,8 @@ let settingsValue = null;
 try { settingsValue = JSON.parse(settingsText); } catch { /* reported below */ }
 const wsChanged = changed(wsBefore, wsAfter).filter((k) => !k.endsWith('/'));
 const csp = one('csp');
+// The check's header has no "Prior context" line, so that field shows "could not read", as on the other check meetings.
+const ODD_FIELDS = ['Date: October 13, 2026', 'Duration: 1m', 'Attendees: Kevin Collins, Sam Ortiz', 'Company: Harborline Cloud', 'Type: 1:1', 'Prior context: could not read'];
 const verdict = (ok) => (ok ? 'pass' : 'FAIL');
 // The folder that holds home folders ("/Users" on a Mac), worked out here so this file doesn't spell it out.
 const HOMES = `${path.dirname(os.homedir())}/`;
@@ -250,6 +266,15 @@ const checklist = {
     one('switch-on-load')?.on === false && one('switch-turned-on')?.on === true && one('switch-turned-on')?.privateNotesShown > 0
     && one('switch-after-reload')?.on === false && one('switch-after-reload')?.privateNotesShown === 0
     && one('switch-after-restart', 'restart')?.on === false && one('switch-after-restart', 'restart')?.privateNotesShown === 0),
+  'a summary named with spaces, an apostrophe, an ampersand and an accented letter opens from the Meetings page and from its Board card, with its header fields and its private note hidden': verdict(
+    [one('odd-meeting'), one('odd-meeting-from-board')].every((v) => v && !v.error && v.hash === `#/meetings/${ODD_NAME}`
+      && v.heading === 'Kevin & Sam: Café check | October 13, 2026' && v.fields.join('|') === ODD_FIELDS.join('|')
+      && v.on === false && v.privateNotesShown === 0 && v.privateStatus === '1 private note hidden')
+    && one('odd-meeting').listed && one('odd-meeting-from-board').cards > 0
+    && meetingRequests.some((r) => r.status === 200 && new URLSearchParams(r.target.split('?')[1]).get('file') === ODD_NAME)),
+  'a name that is not a summary shows a plain notice naming it and the link back, not an error': verdict(
+    ev('no-summary').length === 2 && ev('no-summary').every((v) => !v.error && v.notice === `There is no summary named "${v.name}" in meeting-notes/.`
+      && v.backLink === '← All meetings')),
   'external links open in the browser and not in the app window': verdict(one('external-link')?.stayed === true && one('external-window-open')?.stayed === true),
   'an impossible date never shows "Invalid Date"': verdict(pages.length > 0 && pages.every((p) => !p.invalidDate)),
   'an empty board points to "Import action items"': verdict(one('board-empty')?.cards === 0 && /“Import action items”/.test(one('board-empty')?.todo || '')),
@@ -282,6 +307,11 @@ const report = {
     moves: { button: one('card-moved'), drag: one('card-dragged') },
     saves: { book: one('book-saved'), correction: one('correction-saved') },
     privateSwitch: { onLoad: one('switch-on-load'), turnedOn: one('switch-turned-on'), afterReload: one('switch-after-reload'), afterRestart: one('switch-after-restart', 'restart') },
+    oddName: {
+      file: ODD_NAME, fromMeetingsPage: one('odd-meeting'), fromBoard: one('odd-meeting-from-board'), notASummary: ev('no-summary'),
+      // The requests the core received from the window for these names, as sent.
+      requests: meetingRequests.filter((r) => /caf|CLAUDE|nobody/i.test(decodeURIComponent(r.target))),
+    },
     links: { click: one('external-link'), windowOpen: one('external-window-open') },
     csp,
     lsof: lsofs,

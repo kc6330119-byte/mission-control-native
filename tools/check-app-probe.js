@@ -1,10 +1,13 @@
 // Run inside the app window by tools/check-app.mjs (app built with --features probe). It uses the pages the
 // way a person would: clicks, form fields, the switch, a reload. It reports by requesting /__probe/<what>,
 // which the app prints. MODE is replaced by the check script: "session", "restart", "welcome" or "missing".
+// ODD_NAME is replaced with the file name of a summary that has spaces, an apostrophe, an ampersand and an
+// accented letter (decision 76).
 (async () => {
   if (window.__probed) return;
   window.__probed = true;
   const MODE = '__MODE__';
+  const ODD_NAME = '__ODD_NAME__';
   const report = (what, data) => fetch(`/__probe/${what}?${encodeURIComponent(JSON.stringify(data ?? null))}`).catch(() => {});
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const waitFor = async (f, label, ms = 8000) => {
@@ -144,6 +147,40 @@
         await report('page', pageState(`notes ${f}`));
       }
 
+      // ---- a summary whose name has spaces, an apostrophe, an ampersand and an accented letter: opened by
+      // clicking its link on the Meetings page, as a person would ----
+      const oddHref = `#/meetings/${encodeURIComponent(ODD_NAME)}`;
+      const meetingView = () => ({
+        hash: decodeURIComponent(location.hash),
+        error: app.querySelector('.notice-error')?.textContent.trim() || null,
+        heading: app.querySelector('.prose h1')?.textContent.trim() || null,
+        fields: [...app.querySelectorAll('.meeting-fields dt')].map((dt) => `${dt.textContent.trim()}: ${dt.nextElementSibling?.textContent.trim()}`),
+        privateStatus: app.querySelector('.private-status')?.textContent.trim() || null,
+        ...switchState(),
+      });
+      await go('#/meetings');
+      const listed = app.querySelector(`a.meeting-card[href="${CSS.escape(oddHref)}"]`);
+      const sourceLinks = app.querySelectorAll(`td.sources a[href="${CSS.escape(oddHref)}"]`).length;
+      listed?.click();
+      await sleep(80);
+      await waitFor(() => !app.querySelector('.loading'), 'the summary to load');
+      await sleep(150);
+      await report('odd-meeting', { listed: !!listed, trackedSourceLinks: sourceLinks, ...meetingView() });
+      await shot('meeting-odd-name');
+
+      // ---- names that are not a summary in meeting-notes/: a plain notice and the link back ----
+      for (const name of ["2026-10-14_nobody's café summary.md", '../CLAUDE.md']) {
+        await go(`#/meetings/${encodeURIComponent(name)}`);
+        await report('no-summary', {
+          name,
+          error: app.querySelector('.notice-error')?.textContent.trim() || null,
+          notice: document.getElementById('no-summary')?.textContent.trim() || null,
+          backLink: app.querySelector('a.back[href="#/meetings"]')?.textContent.trim() || null,
+          textLength: app.innerText.length,
+        });
+        if (name === '../CLAUDE.md') await shot('meeting-no-summary');
+      }
+
       // ---- board: import, move with the → button, then a drag to Done ----
       await go('#/board');
       await report('board-empty', { cards: app.querySelectorAll('.card').length, todo: app.querySelector('.column[data-column=todo] .column-empty')?.textContent ?? null });
@@ -168,6 +205,15 @@
       await waitFor(() => app.querySelector(`.column[data-column=done] .card[data-id="${draggedId}"]`), 'the dragged card');
       await report('card-dragged', { id: draggedId, column: (await json('/api/board')).board.cards.find((c) => c.id === draggedId).column });
       await shot('board-after-moves');
+
+      // ---- a card imported from that summary links back to it ----
+      const oddCards = app.querySelectorAll(`.card a[href="${CSS.escape(oddHref)}"]`);
+      const oddCardCount = oddCards.length;
+      oddCards[0]?.click();
+      await sleep(80);
+      await waitFor(() => !app.querySelector('.loading'), 'the summary from the board');
+      await sleep(150);
+      await report('odd-meeting-from-board', { cards: oddCardCount, ...meetingView() });
 
       // ---- library: add a book through the form ----
       await go('#/library');

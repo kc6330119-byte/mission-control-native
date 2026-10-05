@@ -2,6 +2,9 @@
 //
 // 1. Copies exactly the committed files (git archive HEAD): no git history, no .DS_Store, target/ or
 //    node_modules/. The repository holds no real meeting: its data is the fictional sample workspace.
+//    If the folder is already a git repository (it has a .git), its .git is kept as it is and everything
+//    else is replaced, so a file removed here disappears there too (decision 79). No git command is ever run
+//    in that folder: nothing is added, committed, tagged or pushed. That is left to the person.
 // 2. Runs `npm test` inside that folder with nothing but its own files (Cargo's build output goes to this
 //    repository's target/, so the folder stays clean), and checks the run added nothing to it.
 // 3. Scans every file's name and contents for the home-folders path ("/Users" and a slash on a Mac), this
@@ -42,9 +45,16 @@ function hiddenPrompt(question) {
   });
 }
 
+// Every file in the folder, leaving out the publish repository's own .git.
 const walk = (root) => {
   const out = [];
-  const go = (p) => { for (const e of fs.readdirSync(p, { withFileTypes: true })) { const f = path.join(p, e.name); if (e.isDirectory()) go(f); else out.push(f); } };
+  const go = (p) => {
+    for (const e of fs.readdirSync(p, { withFileTypes: true })) {
+      if (p === root && e.name === '.git') continue;
+      const f = path.join(p, e.name);
+      if (e.isDirectory()) go(f); else out.push(f);
+    }
+  };
   go(root);
   return out.sort();
 };
@@ -63,9 +73,14 @@ step('Copying the committed files');
 if (sh('git', ['status', '--porcelain'], { cwd: REPO }).stdout.trim()) {
   console.log('Note: the working tree has uncommitted changes; they are not included (only HEAD is).');
 }
-if (fs.existsSync(DEST)) {
-  // Only a folder this script made before is replaced.
-  if (!fs.existsSync(path.join(DEST, 'tools', 'publish.mjs')) || fs.existsSync(path.join(DEST, '.git'))) {
+const isRepository = fs.existsSync(path.join(DEST, '.git'));
+if (isRepository) {
+  // A repository the person publishes from: keep its .git, replace everything else.
+  for (const e of fs.readdirSync(DEST)) if (e !== '.git') fs.rmSync(path.join(DEST, e), { recursive: true, force: true });
+  console.log(`${path.basename(DEST)} is a git repository: its .git is kept; everything else is replaced. No git command is run there.`);
+} else if (fs.existsSync(DEST)) {
+  // Otherwise only a folder this script made before is replaced.
+  if (!fs.existsSync(path.join(DEST, 'tools', 'publish.mjs'))) {
     console.error(`${DEST} exists and was not made by this script. Move it away first.`);
     process.exit(1);
   }
@@ -122,8 +137,9 @@ if (!extra.length) console.log('(No extra words given. Run with --ask, or set MC
 
 // ---------- summary ----------
 const size = sh('du', ['-sh', DEST]).stdout.split('\t')[0].trim();
-const top = fs.readdirSync(DEST).sort().map((e) => (fs.statSync(path.join(DEST, e)).isDirectory() ? `${e}/` : e));
-console.log(`\n${path.relative(path.dirname(REPO), DEST)}/: ${files.length} files, ${size}: ${top.join(' ')}`);
+const top = fs.readdirSync(DEST).filter((e) => e !== '.git').sort().map((e) => (fs.statSync(path.join(DEST, e)).isDirectory() ? `${e}/` : e));
+console.log(`\n${path.relative(path.dirname(REPO), DEST)}/: ${files.length} files, ${size}${isRepository ? ' (with its .git)' : ''}: ${top.join(' ')}`);
+if (isRepository) console.log('Nothing was added, committed, tagged or pushed. Review with git status in that folder.');
 const ok = testsPassed && touched.length === 0 && hits === 0;
 console.log(ok ? 'Ready to publish: tests pass with only this folder, and the scan came back empty.' : 'NOT ready: see above.');
 process.exit(ok ? 0 : 1);

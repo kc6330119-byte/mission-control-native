@@ -21,7 +21,7 @@ Last reviewed: 2026-10-02
 5. In Other Insights, coach Kevin using his notes in library/carnegie-notes.md. When the meeting includes a request, a negotiation or a disagreement, also use his notes in library/getting-more-notes.md. Name the book and the principle for each point. Be candid: include what went well and at least one thing Kevin could have done better. Label each point "What went well:" or "Could do better:".
 6. Mark anything that wasn't said in the meeting as "(suggested)". Don't invent facts.
 7. Keep observations about someone's wellbeing brief and factual in a single "Manager-only note". Never record health details.
-8. Save the full summary to `meeting-notes/` with the transcript's file name, then show a condensed version in the chat.
+8. Save the full summary to `meeting-notes/` with the transcript's file name, but ending in .md, then show a condensed version in the chat.
 
 ## When Kevin asks for one of his agents
 - Pass his request to the agent as he wrote it. Don't add sources, files or instructions.

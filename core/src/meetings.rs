@@ -246,9 +246,19 @@ pub fn parse_meeting(ws: &Workspace, file: &str) -> Result<Meeting, Error> {
     })
 }
 
+/// The summaries' file names: the .md files in meeting-notes/, none if the folder is missing. These are the only
+/// names a meeting is opened or linked by. A folder whose name ends in .md is not a summary (decision 77).
+pub fn summary_files(ws: &Workspace) -> Result<Vec<String>, Error> {
+    let mut files = Vec::new();
+    for name in ws.list_dir(MEETINGS_DIR, ".md")?.unwrap_or_default() {
+        if ws.resolve(&format!("{MEETINGS_DIR}/{name}"))?.is_file() { files.push(name); }
+    }
+    Ok(files)
+}
+
 /// Every summary, newest first; undated meetings go last.
 pub fn load_meetings(ws: &Workspace) -> Result<Vec<Meeting>, Error> {
-    let files = ws.list_dir(MEETINGS_DIR, ".md")?.unwrap_or_default();
+    let files = summary_files(ws)?;
     let mut meetings = files.iter().map(|f| parse_meeting(ws, f)).collect::<Result<Vec<_>, _>>()?;
     meetings.sort_by(|a, b| {
         js::locale_compare(b.date.as_deref().unwrap_or(""), a.date.as_deref().unwrap_or(""), false)

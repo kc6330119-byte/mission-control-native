@@ -363,3 +363,34 @@ Made in the Rust core only; server.js and lib/ stay as the "before". test/native
     correction in such a workspace is refused as before, with "library/books.json not found" or
     "corrections/corrections.json not found" in the form; the saving rules are unchanged. The app check
     confirms all of this.
+
+## Decisions (0.1.1, 2026-10-05)
+76. A meeting opens when its file name is one of the summaries listed from meeting-notes/ (the `.md` files
+    there), the rule the Board already used for a card's meeting. Before, the name had to match
+    `^[\w.-]+\.md$`, so a summary saved under a transcript's name with a space, an apostrophe, an ampersand or
+    an accented letter was listed but answered "Invalid meeting file name". It is safe because the name is
+    only compared with the names read from that one folder, never resolved as a path: "..", "/", an absolute
+    path, a file in the folder that doesn't end in `.md` and a name that isn't there can't match, and nothing
+    is read for them. A listed file is still read through the data root's checks, so a symlink in
+    meeting-notes/ that points outside is refused. Any name that isn't a summary answers 404
+    `{ error: 'There is no summary named "<name>" in meeting-notes/.', noSummary: "<name>" }`, and the page
+    shows that sentence as a plain notice with the link back to all meetings, not "Something went wrong."
+    The Node version keeps the old pattern and its answers (400 "Invalid meeting file name", 404 "File not
+    found"); it never sends `noSummary`, so the shared app.js shows its error as before. tools/compare.mjs
+    reports the five meeting refusals it sends as differences: `../CLAUDE.md`, `..%2F..%2Fetc%2Fpasswd`,
+    `%2Fetc%2Fpasswd` and no name (Node 400, Rust 404), and `nope.md` (both 404, different body).
+    test/native.test.js opens such a summary, imports its action items and follows the card back to it,
+    and checks the refusals; the app check opens it in the real window from the Meetings page and from its
+    Board card, and opens two names that aren't summaries.
+77. Only files are summaries. A folder inside meeting-notes/ whose name ends in `.md` is not listed and not
+    opened (404 with `noSummary`), and the Meetings page and the Board load. Before, it was listed and reading
+    it made the Meetings page answer 500. The Node version is unchanged. A test in test/native.test.js.
+78. Step 8 of sample-workspace/CLAUDE.md says the summary keeps the transcript's file name "but ending in
+    .md", since the app lists only `.md` files. The sample's CLAUDE.md now differs from mission-control-demo's
+    by this one phrase. The sample was edited by hand, not remade with tools/make-sample.mjs, because the
+    demo folder has changed since the sample was made.
+79. `npm run publish-folder` also works when ../mission-control-native-publish is a git repository (it has a
+    .git): the .git is kept as it is and everything else is replaced by the committed files, so a file removed
+    here disappears there too. The script runs no git command in that folder: nothing is added, committed,
+    tagged or pushed. The file count, the scan and the "test run changed nothing" check leave out that .git.
+    A folder without .git is replaced as before, and only if this script made it.

@@ -49,6 +49,9 @@ pub enum Error {
     Path(String),
     /// A file that isn't there: 404 "File not found".
     NotFound,
+    /// A meeting name that is not one of the summaries listed from meeting-notes/: 404, sent as
+    /// { error, noSummary } so the page can show a plain notice naming it (decision 76).
+    NoSummary(String),
     /// Anything unexpected: 500 "Server error".
     Internal(String),
 }
@@ -169,7 +172,6 @@ pub struct Core {
     log: Box<dyn Fn(&str) + Send + Sync>,
 }
 
-static MEETING_FILE: LazyLock<regex::Regex> = LazyLock::new(|| js::re(r"^[\w.-]+\.md$", ""));
 static CARD_ROUTE: LazyLock<regex::Regex> = LazyLock::new(|| js::re(r"^\/api\/board\/cards\/([\w-]+)$", ""));
 static MOVE_ROUTE: LazyLock<regex::Regex> = LazyLock::new(|| js::re(r"^\/api\/board\/cards\/([\w-]+)\/move$", ""));
 static BOOK_ROUTE: LazyLock<regex::Regex> = LazyLock::new(|| js::re(r"^\/api\/library\/books\/(\d+)$", ""));
@@ -246,6 +248,9 @@ impl Core {
             Err(Error::Status(s, m)) => Response::error(s, &m),
             Err(Error::Path(m)) => Response::error(400, &m),
             Err(Error::NotFound) => Response::error(404, "File not found"),
+            Err(Error::NoSummary(name)) => Response::json(404, &json!({
+                "error": format!("There is no summary named \"{name}\" in meeting-notes/."), "noSummary": name,
+            })),
             Err(Error::Internal(m)) => {
                 (self.log)(&format!("Server error: {m}"));
                 Response::error(500, "Server error")
@@ -349,7 +354,10 @@ impl Core {
     fn meeting(&self, file: &str, show_private: bool) -> Result<Value, Error> {
         use meetings::{extract_header_fields, parse_meeting, COULD_NOT_READ, FIELDS_PLACEHOLDER};
         use markdown::{render_inline, render_markdown};
-        if !MEETING_FILE.is_match(file) { return Err(Error::Path("Invalid meeting file name".into())); }
+        // Only a summary listed from meeting-notes/ opens, the rule the Board uses for a card's meeting (decision 76).
+        // The name is compared with the listed names, never resolved as a path, so "..", "/" and absolute paths
+        // can't match, and nothing is read for a name that isn't listed.
+        if !meetings::summary_files(&self.ws)?.iter().any(|f| f == file) { return Err(Error::NoSummary(file.to_string())); }
         let meta = parse_meeting(&self.ws, file)?;
         let header = extract_header_fields(&self.ws.read_text(&format!("meeting-notes/{file}"))?);
         if !header.missing.is_empty() {
