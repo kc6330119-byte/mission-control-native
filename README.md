@@ -77,9 +77,64 @@ marked "(suggested)" are added only when "Include suggested items" is ticked.
   underscores. A space, an apostrophe, an ampersand or an accented letter stopped it. 0.1.1 has no such limit.
 - The sample's book notes are placeholders. In one test the coach said so and coached from the meeting
   alone. Expect that until you write your own notes in `library/`.
-- The sample is written for a fictional team. To make it yours, edit `CLAUDE.md`, the summary template and
-  the two agent files, put your own goals in `goals/`, and remove the sample's summaries from
-  `meeting-notes/`. The coach and both agents read the summaries there.
+- The sample is written for a fictional team. To make it yours, follow "Changing the coach and the agents"
+  and "Your own goals" below, and remove the sample's summaries from `meeting-notes/`. The coach and both
+  agents read the summaries there.
+
+### Changing the coach and the agents
+
+The coach is `CLAUDE.md`. Each agent is a file in `.claude/agents/`. Change them in a Claude Code session or
+in any text editor. No special wording is needed: name the one you mean and say what should change, for
+example `Change the negotiation-prep agent so it asks me for a deadline first.`
+
+The Agents page is read-only and reads these files each time it loads. A change shows when you click to
+another page and back, or reload with View ▸ Reload (⌘R). Each card is built from set parts of the file:
+
+| On the card | Comes from |
+|---|---|
+| Name | the `name:` line at the top of an agent file, with hyphens shown as spaces: `negotiation-prep` shows as "Negotiation prep". Without that line, the file name. The coach is always named "Coach". |
+| Tools | the `tools:` line at the top of an agent file. Without it, the card has no Tools line. |
+| Purpose, Sources it may read, Last reviewed | the lines that start with `Purpose:`, `Sources:` and `Last reviewed:` |
+| Rules | the first numbered list in the file, with the line just above it as a caption |
+
+If Purpose, Sources, Last reviewed or the rules are missing, the card says "could not read" in that place
+and the page lists the problem at the top. The coach or agent still works in Claude Code. To keep the card
+whole, add this to your request:
+
+`Keep the Purpose, Sources and Last reviewed lines and the numbered rules. Set Last reviewed to today's date
+as YYYY-MM-DD.`
+
+- "Review due" shows when the Last reviewed date is more than 30 days old. If the date is missing or can't
+  be read, the card shows "Review date unknown" instead. The date changes only when someone edits it.
+- Claude Code decides when to use an agent from the `description:` line at the top of its file. If you
+  change what an agent is for, change that line too, and say when to use it.
+- A new `.md` file in `.claude/agents/` gets its own card. Remove a file and its card goes.
+- The Library page uses the same names and Sources lines. If you rename an agent, a book whose "Used by"
+  still has the old name shows it with a "?". If a book's "Used by" and an agent's Sources line disagree
+  about the book's notes file, the book gets a ⚑ check mark. Edit the book or the Sources line to match.
+- Start a new Claude Code session after a change. Claude Code reads `CLAUDE.md` when a session starts.
+- The sample's `CLAUDE.md` opens by naming its manager, Kevin, and a fictional company, Harborline Cloud.
+  Kevin's name is also in later rules of `CLAUDE.md`, in both agents' `description:` lines and in the
+  summary template. Change these to your own name, role and company first.
+
+### Your own goals
+
+The app does not show goals. Claude Code reads them: the coach when it reviews a transcript, and the
+negotiation-prep agent.
+
+- Put goals in `goals/` as text (`.md`) files, one per person or one for the team. The sample has one file
+  for a whole team. Copy its layout, then remove it once your own files are in place, so fictional goals
+  are not mixed with yours.
+- If your goals are PDFs, convert them once. Put the PDFs in a folder of their own in the workspace, such
+  as `goals-source/`, and ask for each one: `Read goals-source/<name>.pdf and write goals/<name>.md in the
+  layout of the sample goals file. Copy the goals, weights, measures and dated check-ins exactly. Add
+  nothing.` Then check each file against its PDF. Tables are where a conversion goes wrong.
+- Text files matter for two reasons. Claude Code's search works on text and does not look inside a PDF.
+  And the coach uses only check-ins dated on or before the meeting, so it has to be able to read the dates.
+- With one file per person, change step 1 of `CLAUDE.md` from "the goals file" to "the goals files for the
+  people in the meeting".
+- Goals and meeting notes about real people are personnel data. Check your employer's rules before you put
+  them through any AI tool, and keep them out of anything you share.
 
 ## What it reads and writes
 
