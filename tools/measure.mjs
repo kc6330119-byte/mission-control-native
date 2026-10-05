@@ -24,14 +24,27 @@ const RUNS = 5;
 
 const sh = (cmd, args, opts = {}) => spawnSync(cmd, args, { encoding: 'utf8', ...opts });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const say = (line) => process.stderr.write(`${line}\n`);
+// Nothing this script prints may hold a home-folder path ("/Users" and a slash on a Mac, worked out here so
+// this file doesn't spell it out): a line that would is not printed, and the script stops.
+const HOMES = `${path.dirname(os.homedir())}/`;
+const safe = (text) => {
+  if (String(text).includes(HOMES)) {
+    process.stderr.write('measure: stopped. A line it was about to print contains a home-folder path, so nothing more is printed.\n');
+    process.exit(1);
+  }
+  return text;
+};
+const say = (line) => process.stderr.write(`${safe(line)}\n`);
+const fail = (line) => { console.error(safe(line)); process.exit(1); };
+// An unexpected error prints its message only (a stack trace would show file paths), and goes through the guard too.
+for (const event of ['uncaughtException', 'unhandledRejection']) process.on(event, (err) => fail(`measure: failed: ${err?.message ?? err}`));
 
 // ---------- before anything: the release bundle is there, and it is the normal build ----------
-if (!fs.existsSync(APP_EXE)) { console.error(`No release bundle at ${path.relative(REPO, APP)}. Run: npm run build:app`); process.exit(1); }
+if (!fs.existsSync(APP_EXE)) fail(`No release bundle at ${path.relative(REPO, APP)}. Run: npm run build:app`);
 const appBinary = fs.readFileSync(APP_EXE).toString('latin1');
-if (appBinary.includes('MC_PROBE')) { console.error('The release bundle contains the probe. Rebuild it with: npm run build:app'); process.exit(1); }
-if (sh('pgrep', ['-f', APP_EXE]).stdout.trim()) { console.error(`${CONF.productName} is already running. Quit it first, so every run starts the same way.`); process.exit(1); }
-if (!fs.existsSync(path.join(REPO, 'server.js'))) { console.error('server.js is missing; the Node version is needed for the comparison.'); process.exit(1); }
+if (appBinary.includes('MC_PROBE')) fail('The release bundle contains the probe. Rebuild it with: npm run build:app');
+if (sh('pgrep', ['-f', APP_EXE]).stdout.trim()) fail(`${CONF.productName} is already running. Quit it first, so every run starts the same way.`);
+if (!fs.existsSync(path.join(REPO, 'server.js'))) fail('server.js is missing; the Node version is needed for the comparison.');
 
 // ---------- helpers ----------
 const kb = (p) => Number(sh('du', ['-sk', p]).stdout.split('\t')[0]) || 0; // allocated on disk, in KB
@@ -88,7 +101,11 @@ const nodeDiskKb = runtimeKb + modulesKb + siteKb;
 const appKb = kb(APP);
 const sampleKb = kb(path.join(APP, 'Contents', 'Resources', 'sample-workspace'));
 const archs = sh('lipo', ['-archs', APP_EXE]).stdout.trim();
-const appLibs = sh('otool', ['-L', APP_EXE]).stdout.split('\n').slice(1).map((l) => l.trim().split(' ')[0]).filter(Boolean);
+// otool -L prints a header line per chip type ("<binary> (architecture arm64):"), then one indented line per
+// library. Only the indented lines are libraries; a universal binary lists each library once per chip type.
+const appLibs = [...new Set(sh('otool', ['-L', APP_EXE]).stdout.split('\n')
+  .filter((l) => /^\s+\S/.test(l))
+  .map((l) => l.trim().replace(/ \(compatibility version [^)]*\)$/, '')))];
 const appOutsideMacOS = appLibs.filter((p) => !isMacOSPart(p));
 
 // ---------- 2 and 3. first page, and memory with it showing ----------
@@ -223,6 +240,6 @@ out.push(`3. Two seconds after the first page was ready in each run of row 2: th
 out.push(`4. Lines that hold code: not blank and not only a comment. Node: server.js and lib/*.js. Rust core: core/src. Rust app: app/src without probe.rs (${loc.probe} lines, built only for the app check) and without Rust unit tests. Page files: public/index.html, app.js and styles.css, served by both (the app's core writes the app's name over the page title and the brand; the Node version shows them as written); welcome.html and welcome.js are the app's alone. Libraries (marked; comrak, Tauri) and the test server are not counted.`);
 out.push('');
 out.push(`Release bundle checked: no probe code. Node version's page checked: no "__" in index.html, app.js or styles.css. No network used: the Node version listens on 127.0.0.1 only; the app opens no port.`);
-console.log(out.join('\n'));
+console.log(safe(out.join('\n')));
 fs.rmSync(path.join(OUT, 'node'), { recursive: true, force: true });
 fs.rmSync(path.join(OUT, 'app'), { recursive: true, force: true });
