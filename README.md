@@ -52,8 +52,10 @@ Claude Code, run in the same folder. You need Claude Code installed and signed i
 
 1. In Terminal, go to your workspace folder and start `claude`. The app's window title shows which folder
    that is.
-2. `CLAUDE.md` is the coach. It is active as soon as the session opens. `/agents` lists the other two,
-   `negotiation-prep` and `blind-spot-check`, along with any built-in agents and any of your own.
+2. `CLAUDE.md` is the coach. It is active as soon as the session opens. The agents are the files in
+   `.claude/agents/`; the sample has two, `negotiation-prep` and `blind-spot-check`. To see which ones a
+   session has, ask `Which agents in .claude/agents can you use in this project?` Earlier versions of Claude
+   Code listed them with `/agents`; 2.1.290 no longer does.
 
 ### Prompts to try
 
@@ -80,6 +82,16 @@ marked "(suggested)" are added only when "Include suggested items" is ticked.
 - The sample is written for a fictional team. To make it yours, follow "Changing the coach and the agents"
   and "Your own goals" below, and remove the sample's summaries from `meeting-notes/`. The coach and both
   agents read the summaries there.
+- The header shows "Recreated demo data" while the workspace holds a file named `.sample-workspace`. Delete
+  that file, then reload with View ▸ Reload (⌘R), to remove the badge. It is hidden: in Finder, press
+  Command-Shift-period to show it. While the file is there, ages on the Meetings page count to the newest
+  meeting. Without it they count to today.
+- For real work, a new folder is cleaner than converting the sample. From a copy of the sample, copy
+  `CLAUDE.md` and the `.claude/`, `templates/`, `library/` and `corrections/` folders into the new folder.
+  `.claude/` is hidden too. The app opens such a folder without a warning. It has no badge and no fictional
+  summaries or goals, but the copied files still name Kevin and Harborline Cloud: change them as described
+  below. `library/` brings the sample's books and placeholder notes, and `corrections/` the sample's log.
+  To start the log empty, replace everything in `corrections/corrections.json` with `{ "entries": [] }`.
 
 ### Changing the coach and the agents
 
@@ -135,6 +147,19 @@ negotiation-prep agent.
   people in the meeting".
 - Goals and meeting notes about real people are personnel data. Check your employer's rules before you put
   them through any AI tool, and keep them out of anything you share.
+
+### Optional agents
+
+The repository's `extras/` folder holds three more agents and a weekly brief that combines them. They are
+not in the app or its sample: the download does not include them, and Open Sample… does not copy them.
+`extras/README.md` says how to add them to a workspace and what was tested.
+
+| File | The question it answers |
+|---|---|
+| `extras/agents/one-on-one-prep.md` | I'm meeting Sam. What's open, what do I owe, and what should I ask? |
+| `extras/agents/commitment-tracker.md` | What have I committed to in my meetings and not closed? |
+| `extras/agents/risk-radar.md` | What work risks have come up in my meetings, and how has each changed? |
+| `extras/weekly-brief.md` | A section for `CLAUDE.md`. It runs the agents and writes one page: priorities, decisions needed, collisions and a draft escalation. |
 
 ## What it reads and writes
 
